@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"song-recognition/models"
 	"song-recognition/utils"
 	"strings"
@@ -218,9 +219,19 @@ func GetMetadata(filePath string) (FFmpegMetadata, error) {
 	return metadata, nil
 }
 
-func ProcessRecording(recData *models.RecordData, saveRecording bool) ([]float64, error) {
+type Recording struct {
+	Samples    []float64
+	SampleRate int
+	Duration   float64
+}
+
+func ProcessRecording(recData *models.RecordData, saveRecording bool) (*Recording, error) {
 	decodedAudioData, err := base64.StdEncoding.DecodeString(recData.Audio)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := utils.CreateFolder("tmp"); err != nil {
 		return nil, err
 	}
 
@@ -229,40 +240,61 @@ func ProcessRecording(recData *models.RecordData, saveRecording bool) ([]float64
 		now.Second(), now.Minute(), now.Hour(),
 		now.Day(), now.Month(), now.Year(),
 	)
-	filePath := "tmp/" + fileName
 
-	err = WriteWavFile(filePath, decodedAudioData, recData.SampleRate, recData.Channels, recData.SampleSize)
+	filePath := fmt.Sprintf("tmp/%s", fileName)
+	if err := WriteWavFile(filePath, decodedAudioData, recData.SampleRate, recData.Channels, recData.SampleSize); err != nil {
+		return nil, err
+	}
+	defer utils.DeleteFile(filePath)
+
+	reformattedPath, err := ReformatWAV(filePath, 1)
 	if err != nil {
 		return nil, err
 	}
 
-	reformatedWavFile, err := ReformatWAV(filePath, 1)
+	wavInfo, err := ReadWavInfo(reformattedPath)
 	if err != nil {
+		utils.DeleteFile(reformattedPath)
 		return nil, err
 	}
 
-	wavInfo, _ := ReadWavInfo(reformatedWavFile)
-	samples, _ := WavBytesToSamples(wavInfo.Data)
+	samples, err := WavBytesToSamples(wavInfo.Data)
+	if err != nil {
+		utils.DeleteFile(reformattedPath)
+		return nil, err
+	}
+
+	duration := wavInfo.Duration
+	if duration <= 0 && wavInfo.SampleRate > 0 {
+		duration = float64(len(samples)) / float64(wavInfo.SampleRate)
+	}
 
 	if saveRecording {
 		logger := utils.GetLogger()
 		ctx := context.Background()
 
-		err := utils.CreateFolder("recordings")
-		if err != nil {
+		if err := utils.CreateFolder("recordings"); err != nil {
 			err := xerrors.New(err)
 			logger.ErrorContext(ctx, "Failed create folder.", slog.Any("error", err))
-		}
-
-		newFilePath := strings.Replace(reformatedWavFile, "tmp/", "recordings/", 1)
-		err = os.Rename(reformatedWavFile, newFilePath)
-		if err != nil {
-			logger.ErrorContext(ctx, "Failed to move file.", slog.Any("error", err))
+			saveRecording = false
+		} else {
+			targetPath := filepath.Join("recordings", filepath.Base(reformattedPath))
+			if err := os.Rename(reformattedPath, targetPath); err != nil {
+				logger.ErrorContext(ctx, "Failed to move file.", slog.Any("error", err))
+				saveRecording = false
+			} else {
+				reformattedPath = targetPath
+			}
 		}
 	}
 
-	utils.DeleteFile(fileName)
-	utils.DeleteFile(reformatedWavFile)
+	if !saveRecording {
+		utils.DeleteFile(reformattedPath)
+	}
 
-	return samples, nil
+	return &Recording{
+		Samples:    samples,
+		SampleRate: wavInfo.SampleRate,
+		Duration:   duration,
+	}, nil
 }

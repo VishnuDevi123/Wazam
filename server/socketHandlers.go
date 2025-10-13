@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -13,7 +12,6 @@ import (
 	"song-recognition/utils"
 	"song-recognition/wav"
 	"strings"
-	"time"
 
 	socketio "github.com/googollee/go-socket.io"
 	"github.com/mdobak/go-xerrors"
@@ -178,7 +176,8 @@ func handleSongDownload(socket socketio.Conn, spotifyURL string) {
 	}
 }
 
-// handleNewRecording saves new recorded audio snippet to a WAV file.
+// handleNewRecording ingests a live snippet, normalizes it, fingerprints it,
+// and emits the ranked matches back to the client.
 func handleNewRecording(socket socketio.Conn, recordData string) {
 	logger := utils.GetLogger()
 	ctx := context.Background()
@@ -190,30 +189,33 @@ func handleNewRecording(socket socketio.Conn, recordData string) {
 		return
 	}
 
-	err := utils.CreateFolder("recordings")
+	recording, err := wav.ProcessRecording(&recData, true)
 	if err != nil {
 		err := xerrors.New(err)
-		logger.ErrorContext(ctx, "Failed create folder.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to process recording.", slog.Any("error", err))
+		return
 	}
 
-	now := time.Now()
-	fileName := fmt.Sprintf("%04d_%02d_%02d_%02d_%02d_%02d.wav",
-		now.Second(), now.Minute(), now.Hour(),
-		now.Day(), now.Month(), now.Year(),
-	)
-	filePath := "recordings/" + fileName
-
-	decodedAudioData, err := base64.StdEncoding.DecodeString(recData.Audio)
+	matches, _, err := shazam.FindMatches(recording.Samples, recording.Duration, recording.SampleRate)
 	if err != nil {
 		err := xerrors.New(err)
-		logger.ErrorContext(ctx, "Failed to decode base64", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to find matches for recording.", slog.Any("error", err))
+		return
 	}
 
-	err = wav.WriteWavFile(filePath, decodedAudioData, recData.SampleRate, recData.Channels, recData.SampleSize)
+	topMatches := matches
+	if len(topMatches) > 5 {
+		topMatches = topMatches[:5]
+	}
+
+	jsonData, err := json.Marshal(topMatches)
 	if err != nil {
 		err := xerrors.New(err)
-		logger.ErrorContext(ctx, "Failed write wav file.", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to marshal matches.", slog.Any("error", err))
+		return
 	}
+
+	socket.Emit("matches", string(jsonData))
 }
 
 func handleNewFingerprint(socket socketio.Conn, fingerprintData string) {
