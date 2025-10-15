@@ -43,8 +43,8 @@ services:
     working_dir: /app
     ports:
       - "4111:4111"
-    volumes:
-      - ./mastra-agent:/app
+    #volumes:
+      #- ./mastra-agent:/app
     environment:
       - NODE_ENV=development
     restart: unless-stopped

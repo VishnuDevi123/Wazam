@@ -1,19 +1,19 @@
-# Mastra Agent Dockerfile (fully fixed)
 FROM node:20-bullseye-slim
 
 WORKDIR /app
 
-# Copy only package files first to leverage caching
+# Copy dependencies first
 COPY package*.json ./
 
-# Clean NPM cache and install fresh dependencies (no prebuilt rollup binaries)
-RUN npm cache clean --force && \
+# Install local and global dependencies
+RUN npm install -g mastra && \
     npm install --ignore-scripts && \
     npm rebuild rollup --verbose
 
-# Copy rest of the source
+# Copy source files
 COPY . .
 
 EXPOSE 4111
 
+# Use your same local command
 CMD ["npm", "run", "dev"]
