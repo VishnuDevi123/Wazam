@@ -39,9 +39,9 @@
     margin-left: 15px;
 }
 
-.SlideItem:nth-child(1) { background-color: rebeccapurple;}
-.SlideItem:nth-child(2) { background-color: dodgerblue;}
-.SlideItem:nth-child(3) { background-color: greenyellow;}
+.SlideItem:nth-child(1) { background-color: rgb(234, 0, 250);}
+.SlideItem:nth-child(2) { background-color: rgb(255, 0, 0);}
+.SlideItem:nth-child(3) { background-color: rgb(0, 255, 55);}
 
 .Iframe {
     width: 450px;

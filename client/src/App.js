@@ -9,9 +9,9 @@ import { ToastContainer, toast, Slide } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { MediaRecorder, register } from "extendable-media-recorder";
 import { connect } from "extendable-media-recorder-wav-encoder";
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
-
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile } from "@ffmpeg/util";
+import MastraChat from "./components/MastraChat";
 
 import AnimatedNumber from "./components/AnimatedNumber";
 
@@ -23,8 +23,8 @@ var socket = io(server);
 function App() {
   let ffmpegLoaded = false;
   const ffmpeg = new FFmpeg();
-  const uploadRecording = true
-  const isPhone = window.innerWidth <= 550
+  const uploadRecording = true;
+  const isPhone = window.innerWidth <= 550;
   const [stream, setStream] = useState();
   const [matches, setMatches] = useState([]);
   const [totalSongs, setTotalSongs] = useState(10);
@@ -86,12 +86,12 @@ function App() {
     return () => clearInterval(intervalId);
   }, []);
 
-  useEffect(() => { 
+  useEffect(() => {
     (async () => {
       try {
         const go = new window.Go();
         const result = await WebAssembly.instantiateStreaming(
-          fetch("/main.wasm"), 
+          fetch("/main.wasm"),
           go.importObject
         );
         go.run(result.instance);
@@ -99,7 +99,6 @@ function App() {
         if (typeof window.generateFingerprint === "function") {
           setGenFingerprint(() => window.generateFingerprint);
         }
-
       } catch (error) {
         console.error("Error loading WASM:", error);
       }
@@ -174,25 +173,30 @@ function App() {
 
         cleanUp();
 
-        const inputFile = 'input.wav';
-        const outputFile = 'output_mono.wav';
+        const inputFile = "input.wav";
+        const outputFile = "output_mono.wav";
 
         // Convert audio to mono with a sample rate of 44100 Hz
-        await ffmpeg.writeFile(inputFile, await fetchFile(blob))
+        await ffmpeg.writeFile(inputFile, await fetchFile(blob));
         const exitCode = await ffmpeg.exec([
-          '-i', inputFile,
-          '-c', 'pcm_s16le',
-          '-ar', '44100',
-          '-ac', '1',
-          '-f', 'wav',
-          outputFile
+          "-i",
+          inputFile,
+          "-c",
+          "pcm_s16le",
+          "-ar",
+          "44100",
+          "-ac",
+          "1",
+          "-f",
+          "wav",
+          outputFile,
         ]);
         if (exitCode !== 0) {
           throw new Error(`FFmpeg exec failed with exit code: ${exitCode}`);
         }
 
         const monoData = await ffmpeg.readFile(outputFile);
-        const monoBlob = new Blob([monoData.buffer], { type: 'audio/wav' });
+        const monoBlob = new Blob([monoData.buffer], { type: "audio/wav" });
 
         const reader = new FileReader();
         reader.readAsArrayBuffer(monoBlob);
@@ -200,16 +204,21 @@ function App() {
           const arrayBuffer = event.target.result;
           const audioContext = new AudioContext();
           const arrayBufferCopy = arrayBuffer.slice(0);
-          const audioBufferDecoded = await audioContext.decodeAudioData(arrayBufferCopy);
-          
+          const audioBufferDecoded = await audioContext.decodeAudioData(
+            arrayBufferCopy
+          );
+
           const audioData = audioBufferDecoded.getChannelData(0);
           const audioArray = Array.from(audioData);
 
-          const result = genFingerprint(audioArray, audioBufferDecoded.sampleRate);
+          const result = genFingerprint(
+            audioArray,
+            audioBufferDecoded.sampleRate
+          );
           if (result.error !== 0) {
-            toast["error"](() => <div>An error occured</div>)
-            console.log("An error occured: ", result)
-            return
+            toast["error"](() => <div>An error occured</div>);
+            console.log("An error occured: ", result);
+            return;
           }
 
           const fingerprintMap = result.data.reduce((dict, item) => {
@@ -218,7 +227,10 @@ function App() {
           }, {});
 
           if (sendRecordingRef.current) {
-            socket.emit("newFingerprint", JSON.stringify({ fingerprint: fingerprintMap }));
+            socket.emit(
+              "newFingerprint",
+              JSON.stringify({ fingerprint: fingerprintMap })
+            );
           }
 
           if (uploadRecording) {
@@ -249,8 +261,6 @@ function App() {
       cleanUp();
     }
   }
-
-
 
   function downloadRecording(blob) {
     const blobUrl = URL.createObjectURL(blob);
@@ -288,7 +298,7 @@ function App() {
   return (
     <div className="App">
       <div className="TopHeader">
-        <h2 style={{ color: "#374151" }}>!Shazam</h2>
+        <h2 style={{ color: "#374151" }}>Wazam</h2>
         <h4 style={{ display: "flex", justifyContent: "flex-end" }}>
           <AnimatedNumber includeComma={true} animateToNumber={totalSongs} />
           &nbsp;Songs
@@ -342,6 +352,9 @@ function App() {
         theme="light"
         transition={Slide}
       />
+      <div className="chat-section" style={{ marginTop: "2rem" }}>
+        <MastraChat />
+      </div>
     </div>
   );
 }

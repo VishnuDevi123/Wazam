@@ -29,3 +29,22 @@ services:
     volumes:
       - seek-tune-db:/home/seek-tune/db
       - seek-tune-songs:/home/seek-tune/songs
+
+    depends_on:
+      - mastra-agent   # ensures this starts after mastra-agent
+
+  # 🎵 Mastra Agent Service (added below)
+  mastra-agent:
+    build:
+      context: ./mastra-agent
+      dockerfile: Dockerfile
+    container_name: mastra-agent
+    command: ["npm", "run", "dev"]
+    working_dir: /app
+    ports:
+      - "4111:4111"
+    volumes:
+      - ./mastra-agent:/app
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
