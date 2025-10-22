@@ -9,8 +9,8 @@ dotenv.config();
  * Fetches similar artists/songs from Spotify’s public API.
  */
 async function getSpotifyAccessToken(): Promise<string> {
-  const clientId = "7e8f667b35ed40f8925e0f1c58af0c39";
-  const clientSecret = "c42bc92b58114a78aa7f9c5b2ef35dab";
+  const clientId = process.env.SPOTIFY_CLIENT_ID 
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
   const authString = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
   const res = await fetch("https://accounts.spotify.com/api/token", {
