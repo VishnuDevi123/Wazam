@@ -1,158 +1,147 @@
-SEEK-TUNE
+# SEEK-TUNE
+AI-powered music discovery platform that identifies songs from short audio snippets using
+Shazam-style audio fingerprinting and delivers conversational, personalized recommendations.
 
+## Overview
+Seek-Tune is a full-stack system that combines **in-browser audio fingerprinting**, a **high-performance Go backend**, and a **conversational recommendation agent** to enable fast, privacy-preserving music discovery.
 
-⸻
+Key characteristics:
+- Identifies songs from short, noisy audio clips
+- Performs fingerprinting entirely client-side (no raw audio upload)
+- Supports real-time matching, downloads, and recommendations
+- Fully containerized with Docker Compose for reproducible deployment
 
-OVERVIEW
+## Core Features
 
-Seek-Tune is an AI-powered music discovery platform that combines a reverse-engineered audio fingerprinting engine (Shazam-style), a Go backend for matching and file management, a React frontend for user interaction, and a Mastra Agent for conversational, tool-enabled recommendations.
-The project is containerized with Docker Compose so that the entire stack (frontend, backend, and agent) can be built and run consistently in one command.
+- **Shazam-style audio fingerprinting** using spectral peak hashing
+- **WebAssembly DSP** running directly in the browser
+- **Go backend** for fast hash-based matching and media handling
+- **React frontend** for recording, matching, and result exploration
+- **Conversational AI agent** for follow-up queries and recommendations
+- **Real-time updates** via WebSockets
+- **Privacy-first design** (fingerprints only, no waveform storage)
 
-⸻
+## System Design (High Level)
 
-KEY COMPONENTS AND CONCEPTS
+The system is composed of four cooperating layers:
 
-AUDIO FINGERPRINTING (SHAZAM-LIKE)
+- **Client layer**: React UI, in-browser FFmpeg preprocessing, WASM fingerprint generation  
+- **Matching layer**: Go service for fingerprint lookup, scoring, and metadata retrieval  
+- **Recommendation layer**: Mastra Agent providing conversational, tool-driven suggestions  
+- **Infrastructure layer**: Docker Compose orchestrating all services and networking  
 
-The goal of the fingerprinting system is to identify a song from a short audio snippet, whether it is recorded audio, device playback, or even a user hum.
+Each layer is independently deployable but designed to run as a single integrated stack.
 
-The process begins when the user records a short audio segment of about twenty seconds. This audio is then preprocessed in the frontend using FFmpeg to ensure it is in mono format and resampled to a fixed rate of 44.1 kHz.
+## Audio Fingerprinting Pipeline
 
-The core of the fingerprinting is implemented as a WebAssembly (WASM) module that runs directly in the browser. This module performs digital signal processing to extract spectral peaks across time, encoding them as address and anchorTime pairs that represent high-energy frequency events. The resulting fingerprint map (address → anchorTime) emulates the constellation map method used by Shazam-like systems.
+- User records ~20 seconds of audio in the browser
+- Audio is converted to mono and resampled to 44.1 kHz using FFmpeg (client-side)
+- A WebAssembly module extracts spectral peaks across time
+- Peaks are encoded as compact `(hash, time-offset)` pairs
+- Fingerprints are sent to the backend for matching
+- Backend scores matches using time-alignment consistency
+- Top matches are returned with song metadata
 
-Once generated, the fingerprint map is sent to the Go backend, which performs a hash-based lookup across a precomputed database of song fingerprints. Matches are scored based on time alignment and the number of consistent peaks. The top-ranked matches are returned with metadata such as the song title, artist, and album.
+This approach is fast, noise-tolerant, and memory-efficient.
 
-This approach is fast, noise-tolerant, and memory-efficient, since it stores hash pairs instead of entire waveform data.
+## Backend (Go)
 
-⸻
+The Go backend is responsible for:
 
-BACKEND (GO)
+- Fingerprint storage and hash-based matching
+- Ranking matches using temporal alignment
+- Managing song metadata and media files
+- Handling downloads and WAV generation
+- Streaming real-time updates via WebSockets
 
-The backend is responsible for handling all song metadata, fingerprint storage, and matching logic. It receives incoming fingerprint queries and returns ranked matches.
+Storage is backed by:
+- SQLite for metadata
+- On-disk fingerprint and media storage
 
-It also provides additional endpoints for tasks such as downloading songs, generating WAV files, and managing stored media.
+The production container bundles FFmpeg and yt-dlp for media processing.
 
-Internally, it uses an SQLite database and a dedicated songs directory to store references and fingerprint files.
-It supports WebSocket communication for real-time interactions, such as live download status and match results.
+## Frontend (React)
 
-The production Docker image also bundles ffmpeg and yt-dlp to support media processing and conversion directly within the container.
+The frontend provides:
 
-⸻
+- Audio capture directly from the browser
+- In-browser audio preprocessing using FFmpeg
+- Local fingerprint generation via WASM
+- Match result visualization with previews
+- Real-time status updates via Socket.IO
+- Integrated chat interface for recommendations
 
-FRONTEND (REACT)
+All fingerprinting occurs locally, ensuring user audio never leaves the device.
 
-The React frontend serves as the primary user interface for Seek-Tune. It allows users to record or capture audio directly from their device, convert it to mono WAV format using FFmpeg (executed in-browser), and perform WASM-based fingerprint generation before sending any data to the server.
+## Conversational Recommendation Agent
 
-Because fingerprinting happens entirely in-browser, user privacy is preserved as no raw audio leaves the client.
+The Mastra Agent enables natural-language interaction and intelligent music discovery.
 
-Once a match is found, the frontend displays the results through a clean carousel interface, allowing users to play clips, preview matches, and download files.
+Capabilities include:
+- Follow-up recommendations (“find similar songs”)
+- Artist and genre exploration
+- Context-aware responses using tool-based reasoning
 
-A MastraChat component is also included in the UI, which connects to the Mastra Agent backend, allowing users to interact with the system conversationally, ask for similar songs, and explore recommendations.
-Socket.IO is used for real-time updates from the Go backend to keep the interface dynamic and responsive.
+The agent runs as an independent service and can be extended with external APIs
+such as Spotify for richer metadata and personalization.
 
-⸻
+## Why This Project Is Technically Interesting
 
-MASTRA AGENT (CONVERSATIONAL AI)
+- **In-browser DSP with WebAssembly**  
+  Heavy audio processing runs client-side, reducing server load and preserving privacy.
 
-The Mastra Agent enables natural-language conversation and intelligent recommendations. It runs as a separate container (mastra-agent) and exposes an API endpoint that the frontend communicates with.
+- **Shazam-style fingerprinting at scale**  
+  Uses sparse spectral hashes instead of raw audio, enabling fast matching and low storage overhead.
 
-It uses preconfigured tools such as songRecommenderTool to fetch Spotify-like song recommendations and return contextual, human-readable responses.
+- **Cross-language system design**  
+  Integrates WASM, Go, React, and Node-based agents into a cohesive architecture.
 
-The agent supports follow-up questions, such as “find me more songs like this” or “recommend me similar artists,” making the experience interactive and personalized.
+- **Latency-aware design**  
+  Real-time WebSocket updates and local preprocessing minimize end-to-end response time.
 
-⸻
+- **Production-minded deployment**  
+  Fully containerized stack with reproducible builds and isolated services.
 
-ARCHITECTURE DIAGRAM
+## Deployment
 
-[User Browser]
-    ├── React Frontend (WASM Fingerprinting + UI)
-    ├── Socket.IO → Go Backend (Matching, Downloads, Status)
-    └── HTTP → Mastra Agent (Conversational Tools & Recommendations)
+The entire stack is managed with Docker Compose.
 
-[Go Backend] ↔ [Fingerprint DB / Song Storage]
-[Mastra Agent] ↔ [Tools (Spotify API, SongRecommenderTool, etc.)]
+## Build and start all services:
 
-
-⸻
-
-HOW IT WORKS
-
-When a user records a short clip, the frontend captures the audio and converts it to mono WAV format using FFmpeg.
-The WebAssembly fingerprinting function runs locally in the browser and generates a fingerprint map from the audio.
-This map is sent to the Go backend, which performs a lookup and computes similarity scores.
-The backend returns the best matches, and the frontend displays them to the user.
-If the user requests further recommendations, the chat interface sends the query to the Mastra Agent, which fetches related suggestions using its tools and responds conversationally.
-
-⸻
-
-DOCKER AND DEPLOYMENT
-
-The entire Seek-Tune stack is containerized using Docker Compose.
-The Mastra Agent runs in its own container, while the Go backend container also serves the compiled React frontend.
-
-To build and start the entire system from the repository root, use:
-
+```bash
 docker compose up --build
-
-To start without rebuilding:
-
+```
+Start without rebuilding:
+```markdown
 docker compose up
+```
+Stop and clean up:
 
-To stop and remove all containers:
-
+```markdown
 docker compose down
+```
+Services communicate over an internal Docker network using environment configuration.
 
-The Docker network allows the frontend to communicate with the Mastra Agent at http://mastra-agent:4111 and the Go backend through its own internal address.
-If any API endpoints are hard-coded for local testing, replace them with environment variables before building for production.
 
-⸻
+## Development Notes
+- Frontend uses REACT_APP_BACKEND_URL for backend connectivity
+- The WASM file must be served at /main.wasm
+- Fingerprinting function must be globally exposed to the browser
+- Mastra Agent runs with npm run dev
+- Dependency issues can often be resolved with a clean npm ci
 
-DEVELOPMENT NOTES
 
-The frontend build uses the environment variable REACT_APP_BACKEND_URL to connect to the backend during runtime.
-The fingerprinting WebAssembly file (main.wasm) must be accessible under /main.wasm in the production build, and the function generateFingerprint() should be globally exposed to the browser.
+## Future Enhancements
+- Can add the humming to search feature, need to check it out
+- Emotion and mood-based recommendations
+- Collaborative filtering for playlist generation
 
-The Mastra Agent starts with the command npm run dev in the mastra-agent directory.
-If issues occur during build (for example, missing native dependencies), remove the package-lock.json file and reinstall dependencies using npm ci.
+References
+ - Legacy foundation by Chigozirim
+ - Reference video: https://www.youtube.com/watch?v=a0CVCcb0RJM
+ - Github repo: https://github.com/cgzirim/seek-tune
+ - Technical deep dive for nerds: https://drive.google.com/file/d/1ahyCTXBAZiuni6RTzHzLoOwwfTRFaU-C/view
 
-The songRecommenderTool currently uses a basic search-based recommendation method. You may replace it with an OAuth-secured Spotify API integration for richer metadata and personalized responses.
-
-⸻
-
-FUTURE FEATURES AND EXTENSIONS
-
-Planned enhancements include a hum-to-search feature that maps melodic contours to fingerprints, an emotion-based mood tagging model to recommend songs by sentiment, and collaborative filtering for playlist generation.
-A lightweight mobile SDK is also planned to support native iOS and Android capture for portable, offline fingerprinting.
-
-⸻
-
-TROUBLESHOOTING
-
-Working with legacy code was one of the most significant challenges in this project.
-Many outdated libraries required replacement or modification to support modern dependency chains.
-
-If the Mastra Agent fails to start, ensure that npm run dev works locally and that the containerized node modules are compatible with your system architecture.
-
-If fingerprint mismatches occur, confirm that the sample rate and mono conversion are consistent and that the WebAssembly file is being properly loaded in the frontend environment.
-
-⸻
-
-ADDITIONAL INFORMATION
-
-Before running the Mastra Agent, create an .env file in the Mastra workspace and include your OpenAI API key.
-You will also need to include your Spotify Client ID and Spotify Client Secret in an .env file inside the server folder.
-
-⸻
-
-REFERENCES
-
-Huge thanks to Chigozirim for providing the original legacy code that this project was built upon.
-Reference video: https://www.youtube.com/watch?v=a0CVCcb0RJM
-
-For nerds:
-https://drive.google.com/file/d/1ahyCTXBAZiuni6RTzHzLoOwwfTRFaU-C/view
-
-⸻
 
 
 ![alt text](image-2.png)
